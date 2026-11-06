@@ -56,17 +56,21 @@
   const clamp = (n, lo, hi) => Math.max(lo, Math.min(n, hi));
 
   const enter = (el, duration = 1100) => {
-    if (reduce) {
+    if (!el.animate) {
       el.removeAttribute('data-m');
       return;
     }
-    const anim = el.animate(
-      [
-        { opacity: 0, transform: `translateY(${OTHERS.rise}px)`, filter: `blur(${OTHERS.blur}px)` },
-        { opacity: 1, transform: 'translateY(0)', filter: 'blur(0px)' }
-      ],
-      { duration, easing: OTHERS.ease, fill: 'both' }
-    );
+    const frames = reduce
+      ? [{ opacity: 0 }, { opacity: 1 }]
+      : [
+          { opacity: 0, transform: `translateY(${OTHERS.rise}px)`, filter: `blur(${OTHERS.blur}px)` },
+          { opacity: 1, transform: 'translateY(0)', filter: 'blur(0px)' }
+        ];
+    const anim = el.animate(frames, {
+      duration: reduce ? 400 : duration,
+      easing: OTHERS.ease,
+      fill: 'both'
+    });
     anim.onfinish = () => {
       el.removeAttribute('data-m');
       anim.cancel();
@@ -103,21 +107,23 @@
 
   const playLetters = (el) => {
     el.removeAttribute('data-m');
-    if (reduce || !el._words) return;
+    if (!el._words) return;
+    const gap = reduce ? 20 : OTHERS.gap.letters;
     el._words.forEach((chars, wi) => {
       chars.forEach((c, i) => {
-        const anim = c.animate(
-          [
-            { opacity: 0, transform: `translateY(${OTHERS.rise}px)` },
-            { opacity: 1, transform: 'translateY(0)' }
-          ],
-          {
-            duration: OTHERS.speed.sub,
-            delay: OTHERS.gap.letters * wi + OTHERS.gap.letters * i,
-            easing: OTHERS.ease,
-            fill: 'both'
-          }
-        );
+        if (!c.animate) return;
+        const frames = reduce
+          ? [{ opacity: 0 }, { opacity: 1 }]
+          : [
+              { opacity: 0, transform: `translateY(${OTHERS.rise}px)` },
+              { opacity: 1, transform: 'translateY(0)' }
+            ];
+        const anim = c.animate(frames, {
+          duration: reduce ? 400 : OTHERS.speed.sub,
+          delay: gap * wi + gap * i,
+          easing: OTHERS.ease,
+          fill: 'both'
+        });
         anim.onfinish = () => anim.cancel();
       });
     });
@@ -165,10 +171,19 @@
   };
 
   const finishHero = () => {
+    if (!hero) return;
     hero.removeAttribute('data-hero');
     hero.style.removeProperty('font-family');
     hero.style.removeProperty('font-weight');
     hero.style.removeProperty('font-size');
+  };
+
+  const fallback = () => {
+    finishHero();
+    doc.classList.remove('intro-lock');
+    doc.classList.add('ready');
+    revealed = true;
+    document.querySelectorAll('[data-m]').forEach((el) => el.removeAttribute('data-m'));
   };
 
   const fired = { sub: false, icons: false, about: false, tabs: false, panel: false, footer: false };
@@ -208,36 +223,43 @@
     doc.classList.add('ready');
 
     const frame = (t) => {
-      const dt = Math.min((t - last) / 1000, 0.05);
-      last = t;
-      const n = Math.max(1, Math.ceil(dt / (1 / 240)));
-      const h = dt / n;
-      for (let i = 0; i < n; i++) {
-        v += ((-k * (x - LAST) - c * v) / m) * h;
-        x += v * h;
+      try {
+        const dt = Math.min((t - last) / 1000, 0.05);
+        last = t;
+        const n = Math.max(1, Math.ceil(dt / (1 / 240)));
+        const h = dt / n;
+        for (let i = 0; i < n; i++) {
+          v += ((-k * (x - LAST) - c * v) / m) * h;
+          x += v * h;
+        }
+        applyHero(x);
+        reveal(x / LAST);
+        if (Math.abs(v) < 0.05 && Math.abs(x - LAST) < 0.01) {
+          finishHero();
+          reveal(Infinity);
+          return;
+        }
+        requestAnimationFrame(frame);
+      } catch (err) {
+        fallback();
       }
-      applyHero(x);
-      reveal(x / LAST);
-      if (Math.abs(v) < 0.05 && Math.abs(x - LAST) < 0.01) {
-        finishHero();
-        reveal(Infinity);
-        return;
-      }
-      requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
   };
 
+  let started = false;
   const start = () => {
-    if (reduce || !hero) {
-      if (hero) finishHero();
-      doc.classList.remove('intro-lock');
-      doc.classList.add('ready');
-      revealed = true;
-      document.querySelectorAll('[data-m]').forEach((el) => el.removeAttribute('data-m'));
+    if (started) return;
+    started = true;
+    if (!hero) {
+      fallback();
       return;
     }
-    runHero();
+    try {
+      runHero();
+    } catch (err) {
+      fallback();
+    }
   };
 
   const show = (i) => {
@@ -250,8 +272,7 @@
     panels.forEach((p, n) => { p.hidden = n !== i; });
     panelItems(i).forEach((el, n) => {
       el.setAttribute('data-m', '');
-      if (reduce) el.removeAttribute('data-m');
-      else setTimeout(() => enter(el, OTHERS.speed.panel), OTHERS.gap.panel * n);
+      setTimeout(() => enter(el, OTHERS.speed.panel), OTHERS.gap.panel * n);
     });
   };
   tabs.forEach((a, i) => a.addEventListener('click', (e) => { e.preventDefault(); show(i); }));
@@ -309,10 +330,17 @@
     });
     ul.addEventListener('mouseleave', () => { shown = false; el.style.opacity = '0'; });
   };
-  document.querySelectorAll('.entries').forEach(makePill);
 
-  if (sub) prepLetters(sub);
+  try {
+    document.querySelectorAll('.entries').forEach(makePill);
+    if (sub) prepLetters(sub);
+  } catch (err) {
+    fallback();
+  }
 
-  const loads = STEPS.filter(Boolean).map((s) => document.fonts.load(`${s.w} 32px "${s.f}"`, '0nly0'));
-  Promise.race([Promise.all(loads), new Promise((resolve) => setTimeout(resolve, 1500))]).then(start, start);
+  const loads = document.fonts
+    ? STEPS.filter(Boolean).map((s) => document.fonts.load(`${s.w} 32px "${s.f}"`, '0nly0'))
+    : [];
+  Promise.race([Promise.all(loads), new Promise((resolve) => setTimeout(resolve, 3000))]).then(start, start);
+  setTimeout(start, 3500);
 })();
