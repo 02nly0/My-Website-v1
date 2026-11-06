@@ -343,8 +343,132 @@
     ul.addEventListener('mouseleave', () => { shown = false; el.style.opacity = '0'; });
   };
 
+  const makePreview = () => {
+    if (!matchMedia('(hover: hover)').matches) return;
+
+    const style = document.createElement('style');
+    style.textContent =
+      '.hover-preview{position:fixed;top:0;left:0;z-index:50;width:320px;pointer-events:none;overflow:hidden;' +
+      'border-radius:8px;border:1px solid rgba(214,211,209,.5);background:#e7e5e4;' +
+      'box-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);' +
+      'opacity:0;visibility:hidden;will-change:transform,opacity,filter}' +
+      '.hover-preview img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover}';
+    document.head.appendChild(style);
+
+    const box = document.createElement('div');
+    box.className = 'hover-preview';
+    box.setAttribute('aria-hidden', 'true');
+    const img = document.createElement('img');
+    img.alt = '';
+    box.appendChild(img);
+    document.body.appendChild(box);
+
+    const keys = ['x', 'y', 'o', 'b', 'd'];
+    const hiddenB = reduce ? 0 : 4;
+    const hiddenD = reduce ? 0 : -4;
+    const s = { x: 0, y: 0, o: 0, b: hiddenB, d: hiddenD };
+    const v = { x: 0, y: 0, o: 0, b: 0, d: 0 };
+    const t = { x: 0, y: 0, o: 0, b: hiddenB, d: hiddenD };
+    let open = false;
+    let anchor = null;
+    let raf = 0;
+    let last = 0;
+
+    const paint = () => {
+      box.style.transform = `translate(${s.x + s.d}px,${s.y}px)`;
+      box.style.opacity = String(clamp(s.o, 0, 1));
+      box.style.filter = s.b > 0.05 ? `blur(${s.b}px)` : 'none';
+    };
+
+    const step = (now) => {
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      const n = Math.max(1, Math.ceil(dt / (1 / 240)));
+      const h = dt / n;
+      let moving = false;
+      for (let i = 0; i < n; i++) {
+        keys.forEach((k) => {
+          v[k] += (-400 * (s[k] - t[k]) - 30 * v[k]) * h;
+          s[k] += v[k] * h;
+        });
+      }
+      keys.forEach((k) => {
+        if (Math.abs(v[k]) > 0.01 || Math.abs(s[k] - t[k]) > 0.01) moving = true;
+      });
+      if (!moving) keys.forEach((k) => { s[k] = t[k]; v[k] = 0; });
+      paint();
+      if (!moving && !open) box.style.visibility = 'hidden';
+      raf = moving ? requestAnimationFrame(step) : 0;
+    };
+
+    const kick = () => {
+      if (!raf) {
+        last = performance.now();
+        raf = requestAnimationFrame(step);
+      }
+    };
+
+    const place = (a) => {
+      const r = a.getBoundingClientRect();
+      t.x = r.right + 12;
+      t.y = r.top;
+    };
+
+    const hide = () => {
+      open = false;
+      anchor = null;
+      t.o = 0;
+      t.b = hiddenB;
+      t.d = hiddenD;
+      kick();
+    };
+
+    const show = (a) => {
+      const url = a.getAttribute('data-preview');
+      if (!url) {
+        hide();
+        return;
+      }
+      const wasOpen = open;
+      open = true;
+      anchor = a;
+      if (img.getAttribute('src') !== url) img.setAttribute('src', url);
+      place(a);
+      t.o = 1;
+      t.b = 0;
+      t.d = 0;
+      if (!wasOpen || reduce) {
+        s.x = t.x;
+        s.y = t.y;
+        v.x = 0;
+        v.y = 0;
+      }
+      box.style.visibility = 'visible';
+      kick();
+    };
+
+    document.querySelectorAll('.entries').forEach((ul) => {
+      ul.addEventListener('mouseover', (e) => {
+        const a = e.target.closest('a');
+        if (a && ul.contains(a)) show(a);
+      });
+      ul.addEventListener('mouseleave', hide);
+    });
+
+    tabs.forEach((a) => a.addEventListener('click', hide));
+
+    addEventListener('scroll', () => {
+      if (!anchor) return;
+      place(anchor);
+      kick();
+    }, { passive: true });
+
+    paint();
+  };
+
   try {
     document.querySelectorAll('.entries').forEach(makePill);
+    makePreview();
     if (sub) prepLetters(sub);
   } catch (err) {
     fallback();
