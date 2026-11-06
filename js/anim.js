@@ -36,6 +36,16 @@
     blur: 4
   };
 
+  const LETTERS = {
+    rise: 5,
+    duration: 1000,
+    single: 250,
+    wordDelay: 250,
+    charDelay: 25,
+    artificialDelay: 0,
+    ease: 'cubic-bezier(.2,.65,.3,.9)'
+  };
+
   const STEPS = [
     { f: 'Redaction 50', w: 700 },
     { f: 'Redaction 10', w: 400 },
@@ -108,20 +118,22 @@
   const playLetters = (el) => {
     el.removeAttribute('data-m');
     if (!el._words) return;
-    const gap = reduce ? 20 : OTHERS.gap.letters;
+    const wordDelay = reduce ? 60 : LETTERS.wordDelay;
+    const charDelay = reduce ? 10 : LETTERS.charDelay;
     el._words.forEach((chars, wi) => {
+      const duration = reduce ? 400 : chars.length === 1 ? LETTERS.single : LETTERS.duration;
       chars.forEach((c, i) => {
         if (!c.animate) return;
         const frames = reduce
           ? [{ opacity: 0 }, { opacity: 1 }]
           : [
-              { opacity: 0, transform: `translateY(${OTHERS.rise}px)` },
+              { opacity: 0, transform: `translateY(${LETTERS.rise}px)` },
               { opacity: 1, transform: 'translateY(0)' }
             ];
         const anim = c.animate(frames, {
-          duration: reduce ? 400 : OTHERS.speed.sub,
-          delay: gap * wi + gap * i,
-          easing: OTHERS.ease,
+          duration,
+          delay: LETTERS.artificialDelay + wordDelay * wi + charDelay * i,
+          easing: LETTERS.ease,
           fill: 'both'
         });
         anim.onfinish = () => anim.cancel();
