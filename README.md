@@ -16,4 +16,4 @@ Hi! This is the source code of my personal website. It's a clean, simple modern 
 ---
 ### ♥️ Special thanks to
 
-<a href="https://github.com/n2aoi" target="_blank" rel="noopener noreferrer">n2aoi:</a> helper and contributor (and my twin :D)
+<a href="https://github.com/oridays" target="_blank" rel="noopener noreferrer">oridays:</a> helper and contributor (and my twin :D)
